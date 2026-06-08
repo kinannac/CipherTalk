@@ -8,34 +8,46 @@ HOST = '127.0.0.1'
 PORT = 7002
 
 def listen_from_server(client_socket):
-    """Thread ini khusus mendengarkan aliran data masuk dari server secara terus-menerus"""
+    buffer = ""
+
     while True:
         try:
             data = client_socket.recv(4096).decode('utf-8')
+
             if not data:
                 print("\n[INFO] Koneksi terputus dari server CipherTalk.")
                 break
-            
-            packet = json.loads(data)
-            status = packet.get("status")
-            sender = packet.get("sender_alias", "SISTEM")
-            message = packet.get("message", "")
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            
-            # Print output ke terminal
-            if status == "error":
-                print(f"\n[{timestamp}] [!! ERROR !!] {message}")
-            elif status == "info":
-                print(f"\n[{timestamp}] [* INFO *] {message}")
-            else:
-                print(f"\n[{timestamp}] [{sender}]: {message}")
+
+            buffer += data
+
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+
+                if not line.strip():
+                    continue
+
+                packet = json.loads(line)
+
+                status = packet.get("status")
+                sender = packet.get("sender_alias", "SISTEM")
+                message = packet.get("message", "")
+                timestamp = datetime.now().strftime("%H:%M:%S")
+
+                if status == "error":
+                    print(f"\n[{timestamp}] [!! ERROR !!] {message}")
+                elif status == "info":
+                    print(f"\n[{timestamp}] [* INFO *] {message}")
+                else:
+                    print(f"\n[{timestamp}] [{sender}]: {message}")
+
+                print("> ", end="", flush=True)
                 
-            # Memunculkan kembali prompt input agar visual tidak berantakan
-            print("> ", end="", flush=True)
-        except:
-            print("\n[ERROR] Gangguan jaringan terdeteksi.")
+        except OSError:
             break
-    print("Silakan tekan Enter untuk keluar dari program.")
+        except Exception as e:
+            print(f"\n[ERROR] {e}")
+            break
+
     client_socket.close()
     sys.exit()
 
@@ -57,7 +69,7 @@ def start_client():
             "command": "login",
             "payload": nrp_input
         }
-        client.sendall(json.dumps(login_packet).encode('utf-8'))
+        client.sendall((json.dumps(login_packet) + "\n").encode("utf-8"))
         
         # Baca balasan langsung dari server khusus untuk login
         response_data = client.recv(4096).decode('utf-8')
@@ -89,7 +101,8 @@ def start_client():
     listener_thread.start()
 
     # Loop Thread Utama: Menangani Ketikan Input Pengguna ke Jaringan
-    while True:
+    running = True
+    while running:
         try:
             user_input = input("> ").strip()
             if not user_input:
@@ -97,6 +110,7 @@ def start_client():
             
             # Keluar aplikasi
             if user_input.lower() == "/exit":
+                running = False
                 break
                 
             packet = {}
@@ -128,7 +142,7 @@ def start_client():
                     "payload": user_input
                 }
                 
-            client.sendall(json.dumps(packet).encode('utf-8'))
+            client.sendall((json.dumps(packet) + "\n").encode("utf-8"))
         except (KeyboardInterrupt, EOFError):
             print("\nKeluar dari CipherTalk...")
             break

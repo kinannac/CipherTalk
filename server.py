@@ -82,12 +82,14 @@ def generate_alias():
             return alias
 
 def broadcast_to_room(room_name, sender_socket, message_dict):
-    packet = json.dumps(message_dict).encode('utf-8')
+    packet = (json.dumps(message_dict) + "\n").encode('utf-8')
+
     for client_socket in rooms_sockets.get(room_name, []):
         if client_socket != sender_socket:
             try:
                 client_socket.sendall(packet)
-            except:
+            except Exception as e:
+                print(f"Broadcast error: {e}")
                 handle_disconnect(client_socket)
 
 def handle_disconnect(client_socket):
@@ -139,7 +141,7 @@ def handle_client(client_socket):
                     # Cek apakah NRP ini sudah login sebelumnya (mencegah duplicate login)
                     if any(info["nrp"] == input_nrp for info in clients.values()):
                         response = {"status": "error", "message": "NRP ini sudah login dari perangkat lain!"}
-                        client_socket.sendall(json.dumps(response).encode('utf-8'))
+                        client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
                         continue
                     
                     nrp = input_nrp
@@ -160,14 +162,14 @@ def handle_client(client_socket):
                         "sender_alias": "SISTEM",
                         "message": f"Selamat datang! Identitas asli Anda disamarkan. Anda masuk sebagai: {alias}"
                     }
-                    client_socket.sendall(json.dumps(response).encode('utf-8'))
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
                     
                     log_msg = f"NRP {nrp} sukses login menggunakan identitas samaran {alias}."
                     print(f"[AUTH SUCCESS] {log_msg}")
                     logging.info(log_msg)
                 else:
                     response = {"status": "error", "message": "Format gagal! NRP harus berisi 10 digit angka murni."}
-                    client_socket.sendall(json.dumps(response).encode('utf-8'))
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
         except Exception as e:
             print(f"[AUTH ERROR] Kendala autentikasi klien: {e}")
             client_socket.close()
@@ -219,20 +221,20 @@ def handle_client(client_socket):
                     response = {"status": "info", "sender_alias": "SISTEM", "message": f"Forum [{room_name}] sukses dibuat."}
                 else:
                     response = {"status": "error", "sender_alias": "SISTEM", "message": "Nama forum tersebut sudah ada!"}
-                client_socket.sendall(json.dumps(response).encode('utf-8'))
+                client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
                 
             elif command == "join":
                 room_name = payload.strip()
                 history = persistent_rooms_data[room_name][-10:]
                 if history:
-                    client_socket.sendall(json.dumps({"status": "info", "sender_alias": "SISTEM", "message": "[RIWAYAT DISKUSI " + room_name + "]"}).encode('utf-8'))
+                    client_socket.sendall((json.dumps({"status": "info", "sender_alias": "SISTEM", "message": "[RIWAYAT DISKUSI " + room_name + "]"}) + "\n").encode("utf-8"))
                     for chat in history:
                         h_packet = {
                             "status": "success",
                             "sender_alias": f"{chat['sender']} ({chat['timestamp'].split(' ')[1]})",
                             "message": chat["message"]                            }
-                        client_socket.sendall(json.dumps(h_packet).encode('utf-8'))
-                    client_socket.sendall(json.dumps({"status": "info", "sender_alias": "SISTEM", "message": "-----------------------"}).encode('utf-8'))
+                        client_socket.sendall((json.dumps(h_packet) + "\n").encode("utf-8"))
+                    client_socket.sendall((json.dumps({"status": "info", "sender_alias": "SISTEM", "message": "-----------------------"}) + "\n").encode("utf-8"))
 
                 if room_name in rooms_sockets:
                     # Keluar dari room lama
@@ -246,14 +248,14 @@ def handle_client(client_socket):
                     clients[client_socket]["current_room"] = room_name
                     
                     response = {"status": "info", "sender_alias": "SISTEM", "message": f"Anda sukses masuk ke forum [{room_name}]."}
-                    client_socket.sendall(json.dumps(response).encode('utf-8'))
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
                     
                     # Notifikasi orang di room baru
                     join_msg = {"status": "info", "sender_alias": "SISTEM", "message": f"[{my_alias}] bergabung ke forum ini."}
                     broadcast_to_room(room_name, client_socket, join_msg)
                 else:
                     response = {"status": "error", "sender_alias": "SISTEM", "message": "Forum tidak ditemukan! Gunakan /create dulu."}
-                    client_socket.sendall(json.dumps(response).encode('utf-8'))
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
                     
             elif command == "whisper":
                 target_alias = target
@@ -270,10 +272,10 @@ def handle_client(client_socket):
                         "sender_alias": f"[RAHASIA] {my_alias}",
                         "message": payload
                     }
-                    target_socket.sendall(json.dumps(whisper_packet).encode('utf-8'))
+                    target_socket.sendall((json.dumps(whisper_packet) + "\n").encode("utf-8"))
                 else:
                     response = {"status": "error", "sender_alias": "SISTEM", "message": f"Pengguna [{target_alias}] tidak ditemukan di forum ini."}
-                    client_socket.sendall(json.dumps(response).encode('utf-8'))
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
                     
             elif command == "leave":
                 if current_room != "Lobby":
@@ -285,10 +287,10 @@ def handle_client(client_socket):
                     clients[client_socket]["current_room"] = "Lobby"
                     
                     response = {"status": "info", "sender_alias": "SISTEM", "message": "Anda kembali ke Lobby Utama."}
-                    client_socket.sendall(json.dumps(response).encode('utf-8'))
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
                 else:
                     response = {"status": "error", "sender_alias": "SISTEM", "message": "Anda sudah berada di Lobby Utama."}
-                    client_socket.sendall(json.dumps(response).encode('utf-8'))
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
 
             elif command == "list":
                 # Mengambil semua nama room yang terdaftar di dictionary rooms
@@ -298,7 +300,7 @@ def handle_client(client_socket):
                     "sender_alias": "SISTEM",
                     "message": f"Daftar Forum Aktif: {', '.join(room_list)}"
                 }
-                client_socket.sendall(json.dumps(response).encode('utf-8'))
+                client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
 
             elif command == "help":
                 help_text = (
@@ -316,7 +318,7 @@ def handle_client(client_socket):
                     "sender_alias": "SISTEM",
                     "message": help_text
                 }
-                client_socket.sendall(json.dumps(response).encode('utf-8'))        
+                client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))        
         except:
             break
 

@@ -1,6 +1,17 @@
 {
     "rooms": {
-        "Lobby": [],
+        "Lobby": [
+            {
+                "sender": "Kakak_Penasaran_37",
+                "message": "this is lobby, whoami?",
+                "timestamp": "2026-06-08 18:51:54"
+            },
+            {
+                "sender": "Mahasiswa_Informatika_85",
+                "message": "helloow",
+                "timestamp": "2026-06-08 19:31:35"
+            }
+        ],
         "test": [
             {
                 "sender": "Warga_Informatika_36",
@@ -11,6 +22,25 @@
                 "sender": "Warga_Informatika_36",
                 "message": "etnsj",
                 "timestamp": "2026-06-08 17:05:15"
+            }
+        ],
+        "final": [
+            {
+                "sender": "Mahasiswa_Penasaran_68",
+                "message": "ini final apaya?",
+                "timestamp": "2026-06-08 18:54:27"
+            }
+        ],
+        "FP_IF24": [
+            {
+                "sender": "Mahasiswa_Penasaran_68",
+                "message": "test, aku mau tanya FP sisop",
+                "timestamp": "2026-06-08 18:54:04"
+            },
+            {
+                "sender": "Mahasiswa_Penasaran_68",
+                "message": "heloo",
+                "timestamp": "2026-06-08 18:54:07"
             }
         ]
     }

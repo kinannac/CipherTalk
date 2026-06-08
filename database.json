@@ -1,0 +1,17 @@
+{
+    "rooms": {
+        "Lobby": [],
+        "test": [
+            {
+                "sender": "Warga_Informatika_36",
+                "message": "test",
+                "timestamp": "2026-06-08 17:05:12"
+            },
+            {
+                "sender": "Warga_Informatika_36",
+                "message": "etnsj",
+                "timestamp": "2026-06-08 17:05:15"
+            }
+        ]
+    }
+}

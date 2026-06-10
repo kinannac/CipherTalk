@@ -5,6 +5,9 @@ import os
 import re
 import random
 import logging
+import secrets
+import hashlib
+import string
 from datetime import datetime, timedelta
 
 # Setup Logging ke File server.log
@@ -70,13 +73,12 @@ for room_name in persistent_rooms_data.keys():
 
 clients = {}
 
-# Daftar Kata Acak untuk Generator Nama Samaran
-FIRST = ["Pejuang", "Kucing", "Kakak", "Bocah", "Maba", "Mahasiswa"]
-SECOND = ["Informatika", "Progjar", "Cantik", "Ngoding", "StresFP", "Penasaran"]
+FIRST = ["Melon", "Jeruk", "Apel", "Mangga", "Anggur", "Nanas", "Pepaya", "Berry", "Semangka", "Kiwi", "Durian", "Sirsak", "Lemon", "Ceri", "Alpukat", "Jambu"]
+STRINGS = string.ascii_uppercase + string.digits
 
 def generate_alias():
     while True:
-        alias = f"{random.choice(FIRST)}_{random.choice(SECOND)}_{random.randint(10,99)}"
+        alias = f"{random.choice(FIRST)}{random.choice(STRINGS)}{random.choice(STRINGS)}{random.choice(STRINGS)}"
         # Pastikan alias belum dipakai pengguna lain yang online
         if all(info["alias"] != alias for info in clients.values()):
             return alias
@@ -120,6 +122,9 @@ def handle_disconnect(client_socket):
         print(f"[DISCONNECT] {log_msg}")
         logging.info(log_msg)
 
+pending_logins = {}
+create_cooldowns = {}
+
 def handle_client(client_socket):
     # Tahap 1: Autentikasi Login (Wajib NRP Valid)
     authenticated = False
@@ -132,49 +137,126 @@ def handle_client(client_socket):
             if not data:
                 client_socket.close()
                 return
-            
+
             packet = json.loads(data)
-            if packet.get("command") == "login":
+            command = packet.get("command")
+
+            # STEP 1: Receive NRP
+            if command == "login":
                 input_nrp = packet.get("payload", "")
-                # Regex mencocokkan format 10 digit angka NRP ITS
-                if re.match(r"^\d{10}$", input_nrp):
-                    # Cek apakah NRP ini sudah login sebelumnya (mencegah duplicate login)
-                    if any(info["nrp"] == input_nrp for info in clients.values()):
-                        response = {"status": "error", "message": "NRP ini sudah login dari perangkat lain!"}
-                        client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
-                        continue
-                    
-                    nrp = input_nrp
-                    alias = generate_alias()
-                    authenticated = True
-                    
-                    # Daftarkan ke state server
-                    clients[client_socket] = {
-                        "nrp": nrp,
-                        "alias": alias,
-                        "current_room": "Lobby"
-                    }
-                    rooms_sockets["Lobby"].append(client_socket)
-                    
-                    # Kirim sukses login beserta nama samaran yang didapatkan
+
+                if not re.match(r"^\d{10}$", input_nrp):
                     response = {
-                        "status": "success",
-                        "sender_alias": "SISTEM",
-                        "message": f"Selamat datang! Identitas asli Anda disamarkan. Anda masuk sebagai: {alias}"
+                        "status": "error",
+                        "message": "Format gagal! NRP harus berisi 10 digit angka murni."
                     }
-                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
-                    
-                    log_msg = f"NRP {nrp} sukses login menggunakan identitas samaran {alias}."
-                    print(f"[AUTH SUCCESS] {log_msg}")
-                    logging.info(log_msg)
+
+                elif any(info["nrp"] == input_nrp for info in clients.values()):
+                    response = {
+                        "status": "error",
+                        "message": "NRP ini sudah login dari perangkat lain!"
+                    }
+
                 else:
-                    response = {"status": "error", "message": "Format gagal! NRP harus berisi 10 digit angka murni."}
-                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
+                    otp = str(secrets.randbelow(900000) + 100000)
+                    pending_logins[input_nrp] = {
+                        "otp_hash": hashlib.sha256(otp.encode()).hexdigest(),
+                        "expires_at": datetime.now() + timedelta(minutes=5),
+                        "attempts": 0
+                    }
+
+                    email = f"{input_nrp}@student.its.ac.id"
+                    # TODO: kirim OTP ke email its
+                    print(f"[OTP DEBUG] OTP untuk {email}: {otp}")
+
+                    response = {
+                        "status": "otp_sent",
+                        "message": "Kode OTP telah dikirim ke email ITS Anda."
+                    }
+
+                client_socket.sendall(
+                    (json.dumps(response) + "\n").encode("utf-8")
+                )
+
+            elif command == "verify_otp":
+                input_nrp = packet.get("nrp", "")
+                input_otp = packet.get("payload", "")
+
+                if input_nrp not in pending_logins:
+                    response = {
+                        "status": "error",
+                        "message": "Tidak ada proses login aktif."
+                    }
+
+                else:
+                    record = pending_logins[input_nrp]
+
+                    if datetime.now() > record["expires_at"]:
+                        del pending_logins[input_nrp]
+
+                        response = {
+                            "status": "error",
+                            "message": "OTP telah kedaluwarsa."
+                        }
+
+                    elif record["attempts"] >= 5:
+                        del pending_logins[input_nrp]
+
+                        response = {
+                            "status": "error",
+                            "message": "Terlalu banyak percobaan OTP."
+                        }
+
+                    elif hashlib.sha256(input_otp.encode()).hexdigest() != record["otp_hash"]:
+                        record["attempts"] += 1
+
+                        response = {
+                            "status": "error",
+                            "message": f"OTP salah. Sisa percobaan: {5 - record['attempts']}"
+                        }
+
+                    else:
+                        # OTP valid
+                        del pending_logins[input_nrp]
+
+                        nrp = input_nrp
+                        alias = generate_alias()
+                        authenticated = True
+
+                        clients[client_socket] = {
+                            "nrp": nrp,
+                            "alias": alias,
+                            "current_room": "Lobby"
+                        }
+
+                        rooms_sockets["Lobby"].append(client_socket)
+
+                        response = {
+                            "status": "success",
+                            "sender_alias": "SISTEM",
+                            "message": (
+                                f"Selamat datang! Identitas asli Anda "
+                                f"disamarkan. Anda masuk sebagai: {alias}"
+                            )
+                        }
+
+                        log_msg = (
+                            f"NRP {nrp} sukses login "
+                            f"menggunakan identitas samaran {alias}."
+                        )
+
+                        print(f"[AUTH SUCCESS] {log_msg}")
+                        logging.info(log_msg)
+
+                client_socket.sendall(
+                    (json.dumps(response) + "\n").encode("utf-8")
+                )
+
         except Exception as e:
             print(f"[AUTH ERROR] Kendala autentikasi klien: {e}")
             client_socket.close()
             return
-
+        
     # Tahap 2: Loop Utama Komunikasi (Routing Perintah JSON)
     while True:
         try:
@@ -211,18 +293,45 @@ def handle_client(client_socket):
                 
             elif command == "create":
                 room_name = payload.strip()
-                if room_name not in persistent_rooms_data: # Gunakan persistent_rooms_data sebagai acuan
-                    persistent_rooms_data[room_name] = []
-                    rooms_sockets[room_name] = []
-                    
-                    # SIMPAN KE FILE JSON
-                    save_database({"rooms": persistent_rooms_data})
-                    
-                    response = {"status": "info", "sender_alias": "SISTEM", "message": f"Forum [{room_name}] sukses dibuat."}
-                else:
-                    response = {"status": "error", "sender_alias": "SISTEM", "message": "Nama forum tersebut sudah ada!"}
-                client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
-                
+                now = datetime.now()
+
+                # Check cooldown
+                if nrp in create_cooldowns:
+                    if now < create_cooldowns[nrp]:
+                        remaining = create_cooldowns[nrp] - now
+
+                        response = {
+                            "status": "error",
+                            "sender_alias": "SISTEM",
+                            "message": (
+                                f"Anda harus menunggu "
+                                f"{remaining.seconds} detik "
+                                f"sebelum membuat forum lagi."
+                            )
+                        }
+
+                        client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
+
+                        continue
+
+                # Create room
+                rooms_sockets[room_name] = []
+
+                persistent_rooms_data[room_name] = []
+
+                save_database({"rooms": persistent_rooms_data})
+
+                create_cooldowns[nrp] = now + timedelta(hours=12)
+
+                response = {
+                    "status": "info",
+                    "sender_alias": "SISTEM",
+                    "message": f"Forum [{room_name}] berhasil dibuat."
+                }
+
+                client_socket.sendall(
+                    (json.dumps(response) + "\n").encode("utf-8")
+                ) 
             elif command == "join":
                 room_name = payload.strip()
                 history = persistent_rooms_data[room_name][-10:]
@@ -271,6 +380,8 @@ def handle_client(client_socket):
                         "status": "success",
                         "sender_alias": f"[RAHASIA] {my_alias}",
                         "message": payload
+                    #    "encrypted_key": packet["encrypted_key"],
+                    #    "ciphertext": packet["ciphertext"]
                     }
                     target_socket.sendall((json.dumps(whisper_packet) + "\n").encode("utf-8"))
                 else:

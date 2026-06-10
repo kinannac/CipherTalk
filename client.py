@@ -78,7 +78,25 @@ def start_client():
             return
         
         res = json.loads(response_data)
-        if res.get("status") == "success":
+        status = res.get("status")
+
+        if status == "otp_sent":
+            otp = input("Masukkan OTP yang dikirim ke email ITS Anda: ")
+
+            verify_packet = {
+                "command": "verify_otp",
+                "nrp": nrp_input,
+                "payload": otp
+            }
+
+            client.sendall((json.dumps(verify_packet) + "\n").encode("utf-8"))
+
+            response_data = client.recv(4096).decode('utf-8').strip()
+            res = json.loads(response_data)
+
+            status = res.get("status")
+
+        if status == "success":
             print(f"\n[* SYSTEM *] {res.get('message')}")
             panduan = (
                 "\n[Panduan Command CipherTalk]\n"

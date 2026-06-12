@@ -63,56 +63,79 @@ def start_client():
     
     # Proses Autentikasi Awal (Looping sampai server melepas status sukses)
     authenticated = False
+    authenticated = False
+
     while not authenticated:
-        nrp_input = input("\nMasukkan 10-digit NRP ITS Anda untuk verifikasi keamanan: ").strip()
+        nrp_input = input(
+            "\nMasukkan 10-digit NRP ITS Anda untuk verifikasi keamanan: "
+        ).strip()
+
         login_packet = {
             "command": "login",
             "payload": nrp_input
         }
-        client.sendall((json.dumps(login_packet) + "\n").encode("utf-8"))
-        
-        # Baca balasan langsung dari server khusus untuk login
-        response_data = client.recv(4096).decode('utf-8')
+
+        client.sendall(
+            (json.dumps(login_packet) + "\n").encode('utf-8')
+        )
+
+        response_data = client.recv(4096).decode('utf-8').strip()
+
         if not response_data:
             print("Server mati saat verifikasi.")
             return
-        
+
         res = json.loads(response_data)
         status = res.get("status")
 
-        if status == "otp_sent":
-            otp = input("Masukkan OTP yang dikirim ke email ITS Anda: ")
+        if status == "error":
+            print(f"[!] {res.get('message')}")
+            continue
 
-            verify_packet = {
-                "command": "verify_otp",
-                "nrp": nrp_input,
-                "payload": otp
-            }
+        elif status == "otp_sent":
+            print(res.get("message"))
 
-            client.sendall((json.dumps(verify_packet) + "\n").encode("utf-8"))
+            # OTP loop
+            while True:
+                otp = input(
+                    "Masukkan OTP yang dikirim ke email ITS Anda: "
+                ).strip()
 
-            response_data = client.recv(4096).decode('utf-8').strip()
-            res = json.loads(response_data)
+                verify_packet = {
+                    "command": "verify_otp",
+                    "nrp": nrp_input,
+                    "payload": otp
+                }
 
-            status = res.get("status")
+                client.sendall(
+                    (json.dumps(verify_packet) + "\n").encode('utf-8')
+                )
 
-        if status == "success":
-            print(f"\n[* SYSTEM *] {res.get('message')}")
-            panduan = (
-                "\n[Panduan Command CipherTalk]\n"
-                "1. /list               -> Menampilkan semua forum yang aktif\n"
-                "2. /create [nama]      -> Membuat forum diskusi baru\n"
-                "3. /join [nama]        -> Masuk ke dalam forum tertentu\n"
-                "4. /leave              -> Keluar dari forum aktif dan kembali ke Lobby\n"
-                "5. /w [alias] [pesan]  -> Membisiki pengguna secara privat\n"
-                "6. Teks Biasa          -> Mengirim pesan publik ke semua orang di forum\n"
-                "7. /exit               -> Keluar dari aplikasi CipherTalk\n"
-            )
-            print(panduan)
-            authenticated = True
-        else:
-            print(f"[!] Gagal Login: {res.get('message')}\n")
+                response_data = client.recv(4096).decode('utf-8').strip()
 
+                if not response_data:
+                    print("Server mati saat verifikasi OTP.")
+                    return
+
+                res = json.loads(response_data)
+                status = res.get("status")
+
+                if status == "success":
+                    print(f"\n[* SYSTEM *] {res.get('message')}")
+                    authenticated = True
+                    break
+
+                elif status == "error":
+                    print(f"[!] {res.get('message')}")
+
+                    # Go back to NRP only if OTP session ended
+                    if (
+                        "kedaluwarsa" in res.get("message", "").lower()
+                        or "terlalu banyak" in res.get("message", "").lower()
+                        or "tidak ada proses login" in res.get("message", "").lower()
+                    ):
+                        break
+    
     # Hidupkan Thread Listener setelah sukses terautentikasi
     listener_thread = threading.Thread(target=listen_from_server, args=(client,))
     listener_thread.daemon = True

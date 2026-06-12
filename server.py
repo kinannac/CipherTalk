@@ -124,6 +124,7 @@ def handle_disconnect(client_socket):
 
 pending_logins = {}
 create_cooldowns = {}
+locked_accounts = {}
 
 def handle_client(client_socket):
     # Tahap 1: Autentikasi Login (Wajib NRP Valid)
@@ -156,6 +157,20 @@ def handle_client(client_socket):
                         "status": "error",
                         "message": "NRP ini sudah login dari perangkat lain!"
                     }
+                    
+                elif input_nrp in locked_accounts:
+                    if datetime.now() < locked_accounts[input_nrp]:
+
+                        remaining = locked_accounts[input_nrp] - datetime.now()
+                        
+                        response = {
+                            "status": "error",
+                            "message": (
+                                f"Terlalu banyak percobaan OTP. "
+                                f"Coba lagi dalam "
+                                f"{remaining.seconds // 60} menit."
+                            )
+                        }
 
                 else:
                     otp = str(secrets.randbelow(900000) + 100000)
@@ -200,6 +215,10 @@ def handle_client(client_socket):
                         }
 
                     elif record["attempts"] >= 5:
+                        locked_accounts[input_nrp] = (
+                            datetime.now() + timedelta(minutes=30)
+                        )
+
                         del pending_logins[input_nrp]
 
                         response = {

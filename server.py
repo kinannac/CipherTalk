@@ -114,10 +114,26 @@ def handle_disconnect(client_socket):
             "message": f"Pengguna [{alias}] telah keluar dari forum."
         }
         broadcast_to_room(room, client_socket, exit_notification)
+
+        pairs_to_remove = {
+            pair
+            for pair in e2ee_enabled
+            if alias in pair
+        }
+
+        e2ee_enabled.difference_update(
+            pairs_to_remove
+        )
+
+        for pair in pairs_to_remove:
+            dm_initiators.pop(pair, None)    
         
         # Hapus dari database user aktif
         del clients[client_socket]
-        client_socket.close()
+        try:
+            client_socket.close()
+        except:
+            pass
         
         log_msg = f"NRP {nrp} ({alias}) terputus dari jaringan."
         print(f"[DISCONNECT] {log_msg}")
@@ -127,6 +143,8 @@ pending_logins = {}
 create_cooldowns = {}
 locked_accounts = {}
 message_history = defaultdict(list)
+dm_initiators = {}
+e2ee_enabled = set()
 
 def handle_client(client_socket):
     # Tahap 1: Autentikasi Login (Wajib NRP Valid)
@@ -448,7 +466,19 @@ def handle_client(client_socket):
                     
             elif command == "whisper":
                 target_alias = target
+                if target_alias == my_alias:
+                    response = {
+                        "status": "error",
+                        "sender_alias": "SISTEM",
+                        "message": "Tidak bisa whisper ke diri sendiri!"
+                    }
+
+                    client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
+                    continue
+
                 target_socket = None
+                
+                pair = frozenset([my_alias, target_alias])
                 # Cari socket milik target_alias
                 for sock, info in clients.items():
                     if info["alias"] == target_alias and info["current_room"] == current_room:
@@ -456,14 +486,121 @@ def handle_client(client_socket):
                         break
                 
                 if target_socket:
-                    whisper_packet = {
-                        "status": "success",
-                        "sender_alias": f"[RAHASIA] {my_alias}",
-                        "message": payload
-                    #    "encrypted_key": packet["encrypted_key"],
-                    #    "ciphertext": packet["ciphertext"]
-                    }
+                    if len(payload) > 100:
+                        response = {
+                            "status": "error",
+                            "sender_alias": "SISTEM",
+                            "message": (
+                                "Pesan terlalu panjang! "
+                                "Maksimal 100 karakter."
+                            )
+                        }
+
+                        client_socket.sendall(
+                            (json.dumps(response) + "\n").encode("utf-8")
+                        )
+
+                        continue
+
+                    now = datetime.now()
+                    history = message_history[nrp]
+
+                    history[:] = [
+                        timestamp
+                        for timestamp in history
+                        if now - timestamp < timedelta(minutes=1)
+                    ]
+
+                    if len(history) >= 5:
+
+                        oldest = history[0]
+
+                        remaining = timedelta(minutes=1) - (now - oldest)
+
+                        response = {
+                            "status": "error",
+                            "sender_alias": "SISTEM",
+                            "message": (
+                                f"Anda telah mencapai batas 5 pesan per menit. "
+                                f"Coba lagi dalam {remaining.seconds + 1} detik."
+                            )
+                        }
+
+                        client_socket.sendall(
+                            (json.dumps(response) + "\n").encode("utf-8")
+                        )
+
+                        continue
+                    
+                    history.append(now)
+
+                    if pair not in dm_initiators:
+                        dm_initiators[pair] = my_alias
+
+                    elif pair not in e2ee_enabled and dm_initiators[pair] != my_alias :
+                        e2ee_enabled.add(pair)
+
+                        target_socket.sendall(
+                            (json.dumps({
+                                "status": "enable_e2ee",
+                                "sender_alias": "SISTEM",
+                                "partner": my_alias,
+                                "message": "Enkripsi diaktifkan."
+                            }) + "\n").encode("utf-8")
+                        )
+
+                        client_socket.sendall(
+                            (json.dumps({
+                                "status": "enable_e2ee",
+                                "sender_alias": "SISTEM",
+                                "partner": target_alias,
+                                "message": "Enkripsi diaktifkan."
+                            }) + "\n").encode("utf-8")
+                        )
+                        
+                    if packet.get("encrypted"):
+                        if pair not in e2ee_enabled:
+                            response = {
+                                "status": "error",
+                                "sender_alias": "SISTEM",
+                                "message": "Sesi E2EE belum aktif."
+                            }
+
+                            client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
+                            continue
+
+                        ciphertext = packet.get("ciphertext")
+
+                        if not ciphertext:
+                            response = {
+                                "status": "error",
+                                "sender_alias": "SISTEM",
+                                "message": "Pesan terenkripsi tidak valid."
+                            }
+
+                            client_socket.sendall(
+                                (json.dumps(response) + "\n").encode("utf-8")
+                            )
+
+                            continue
+
+                        whisper_packet = {
+                            "status": "success",
+                            "sender_alias": f"[RAHASIA] {my_alias}",
+                            "encrypted": True,
+                            "ciphertext": ciphertext
+                        }
+
+                    else:
+                        whisper_packet = {
+                            "status": "success",
+                            "sender_alias": f"[RAHASIA] {my_alias}",
+                            "encrypted": False,
+                            "message": payload
+                        }
+    
                     target_socket.sendall((json.dumps(whisper_packet) + "\n").encode("utf-8"))
+                    
                 else:
                     response = {"status": "error", "sender_alias": "SISTEM", "message": f"Pengguna [{target_alias}] tidak ditemukan di forum ini."}
                     client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))

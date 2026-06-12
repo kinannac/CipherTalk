@@ -431,6 +431,33 @@ def handle_client(client_socket):
                     "message": f"Daftar Forum Aktif: {', '.join(room_list)}"
                 }
                 client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
+                
+            elif command == "online":
+                current_room = clients[client_socket]["current_room"]
+
+                online_aliases = []
+
+                for info in clients.values():
+                    if info["current_room"] == current_room:
+                        online_aliases.append(info["alias"])
+
+                displayed = online_aliases[-10:]
+
+                remaining = len(online_aliases) - len(displayed)
+                message = "[ONLINE] " + ", ".join(displayed)
+
+                if remaining > 0:
+                    message += f", and {remaining} other users"
+
+                response = {
+                    "status": "info",
+                    "sender_alias": "SISTEM",
+                    "message": message
+                }
+
+                client_socket.sendall(
+                    (json.dumps(response) + "\n").encode("utf-8")
+                )
 
             elif command == "help":
                 help_text = (
@@ -439,9 +466,10 @@ def handle_client(client_socket):
                     "2. /create [nama]      -> Membuat forum diskusi baru\n"
                     "3. /join [nama]        -> Masuk ke dalam forum tertentu\n"
                     "4. /leave              -> Keluar dari forum aktif dan kembali ke Lobby\n"
-                    "5. /w [alias] [pesan]  -> Membisiki pengguna secara privat\n"
-                    "6. Teks Biasa          -> Mengirim pesan publik ke semua orang di forum\n"
-                    "7. /exit               -> Keluar dari aplikasi CipherTalk"
+                    "5. /online             -> Menampilkan pengguna yang ONLINE dalam forum\n"
+                    "6. /w [alias] [pesan]  -> Membisiki pengguna secara privat\n"
+                    "7. Teks Biasa          -> Mengirim pesan publik ke semua orang di forum\n"
+                    "8. /exit               -> Keluar dari aplikasi CipherTalk"
                 )
                 response = {
                     "status": "info",

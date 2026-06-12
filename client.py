@@ -165,7 +165,8 @@ def start_client():
                     packet = {"command": "help"}
                 elif command == "/leave":
                     packet = {"command": "leave"}
-
+                elif command == "/online":
+                    packet = {"command": "online"}
                 elif command == "/create" and len(parts) > 1:
                     packet = {"command": "create", "payload": parts[1]}
                 elif command == "/join" and len(parts) > 1:

@@ -600,7 +600,7 @@ def handle_client(client_socket):
                         }
     
                     target_socket.sendall((json.dumps(whisper_packet) + "\n").encode("utf-8"))
-                    
+                    client_socket.sendall((json.dumps(whisper_packet) + "\n").encode("utf-8"))
                 else:
                     response = {"status": "error", "sender_alias": "SISTEM", "message": f"Pengguna [{target_alias}] tidak ditemukan di forum ini."}
                     client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))

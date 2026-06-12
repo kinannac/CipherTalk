@@ -9,6 +9,7 @@ import secrets
 import hashlib
 import string
 from datetime import datetime, timedelta
+from collections import defaultdict
 
 # Setup Logging ke File server.log
 logging.basicConfig(
@@ -125,6 +126,7 @@ def handle_disconnect(client_socket):
 pending_logins = {}
 create_cooldowns = {}
 locked_accounts = {}
+message_history = defaultdict(list)
 
 def handle_client(client_socket):
     # Tahap 1: Autentikasi Login (Wajib NRP Valid)
@@ -290,8 +292,56 @@ def handle_client(client_socket):
             
             current_room = clients[client_socket]["current_room"]
             my_alias = clients[client_socket]["alias"]
-            
+
             if command == "broadcast":
+                if len(payload) > 100:
+                    response = {
+                        "status": "error",
+                        "sender_alias": "SISTEM",
+                        "message": (
+                            "Pesan terlalu panjang! "
+                            "Maksimal 100 karakter."
+                        )
+                    }
+
+                    client_socket.sendall(
+                        (json.dumps(response) + "\n").encode("utf-8")
+                    )
+
+                    continue
+
+                now = datetime.now()
+                history = message_history[nrp]
+
+                history[:] = [
+                    timestamp
+                    for timestamp in history
+                    if now - timestamp < timedelta(minutes=1)
+                ]
+
+                if len(history) >= 5:
+
+                    oldest = history[0]
+
+                    remaining = timedelta(minutes=1) - (now - oldest)
+
+                    response = {
+                        "status": "error",
+                        "sender_alias": "SISTEM",
+                        "message": (
+                            f"Anda telah mencapai batas 5 pesan per menit. "
+                            f"Coba lagi dalam {remaining.seconds + 1} detik."
+                        )
+                    }
+
+                    client_socket.sendall(
+                        (json.dumps(response) + "\n").encode("utf-8")
+                    )
+
+                    continue
+                
+                history.append(now)
+                
                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 chat_entry = {
                     "sender": my_alias,
@@ -318,21 +368,31 @@ def handle_client(client_socket):
                 if nrp in create_cooldowns:
                     if now < create_cooldowns[nrp]:
                         remaining = create_cooldowns[nrp] - now
+                        total_seconds = int(remaining.total_seconds())
+                        hours = total_seconds // 3600
+                        minutes = (total_seconds % 3600) // 60
+
+                        create_cooldowns[nrp] = now + timedelta(hours=12)
+                        
+                        if hours > 0:
+                            time_str = f"{hours} jam"
+                            if minutes > 0:
+                                time_str += f" {minutes} menit"
+                        else:
+                            time_str = f"{minutes} menit"
 
                         response = {
                             "status": "error",
                             "sender_alias": "SISTEM",
-                            "message": (
-                                f"Anda harus menunggu "
-                                f"{remaining.seconds} detik "
-                                f"sebelum membuat forum lagi."
-                            )
+                            "message": f"Coba lagi dalam {time_str}."
                         }
 
                         client_socket.sendall((json.dumps(response) + "\n").encode("utf-8"))
 
                         continue
-
+                    
+                    else:
+                        del create_cooldowns[nrp]
                 # Create room
                 rooms_sockets[room_name] = []
 
@@ -351,6 +411,7 @@ def handle_client(client_socket):
                 client_socket.sendall(
                     (json.dumps(response) + "\n").encode("utf-8")
                 ) 
+            
             elif command == "join":
                 room_name = payload.strip()
                 history = persistent_rooms_data[room_name][-10:]

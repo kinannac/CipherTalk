@@ -13,6 +13,7 @@ class CipherTalkClientGUI:
         self.root = root
         self.root.title("CipherTalk - Anonymous Campus Forum")
         self.root.geometry("800x600")
+        self.root.minsize(400, 300)
         
         self.client_socket = None
         self.my_alias = ""
@@ -40,7 +41,7 @@ class CipherTalkClientGUI:
         self.nrp_entry.focus()
         
         self.login_btn = tk.Button(self.container, text="Kirim NRP", font=("Arial", 11, "bold"), 
-                                   bg="#0056b3", fg="white", width=15, command=self.handle_nrp_submit)
+                        bg="#0056b3", fg="white", width=15, command=self.handle_nrp_submit)
         self.login_btn.pack(pady=20)
 
     def show_otp_screen(self, server_message):
@@ -54,7 +55,7 @@ class CipherTalkClientGUI:
         self.otp_entry.focus()
         
         self.otp_btn = tk.Button(self.container, text="Verifikasi OTP", font=("Arial", 11, "bold"), 
-                                 bg="#28a745", fg="white", width=15, command=self.handle_otp_submit)
+                    bg="#28a745", fg="white", width=15, command=self.handle_otp_submit)
         self.otp_btn.pack(pady=15)
 
     def show_chat_screen(self):
@@ -68,7 +69,7 @@ class CipherTalkClientGUI:
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         
         self.info_label = tk.Label(left_frame, text=f"Identitas Samaran Anda: {self.my_alias}", 
-                                   font=("Arial", 11, "bold"), fg="#0056b3", anchor="w")
+                        font=("Arial", 11, "bold"), fg="#0056b3", anchor="w")
         self.info_label.pack(fill=tk.X, pady=(0, 5))
         
         self.chat_area = scrolledtext.ScrolledText(left_frame, wrap=tk.WORD, font=("Arial", 10), bg="#f8f9fa")
@@ -77,13 +78,27 @@ class CipherTalkClientGUI:
         
         bottom_frame = tk.Frame(left_frame)
         bottom_frame.pack(fill=tk.X, pady=(5, 0))
-        
+
         self.msg_entry = tk.Entry(bottom_frame, font=("Arial", 11))
+        
+        emoji_frame = tk.Frame(bottom_frame)
+        emoji_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 0))
+
+        for emoji in ["😂", "😭", "🔥", "❤️", "👍", "👀", "🤔", "👋", "🙌", "🤞", "😎",
+            "🥳", "🤩", "😱", "🤡", "🤖", "🙂", "🙋", "🙏", "✌️"]:
+            tk.Button(
+                emoji_frame,
+                text=emoji,
+                width=2,
+                font=("Segoe UI Emoji", 10),
+                command=lambda e=emoji: self.insert_emoji(e)
+            ).pack(side=tk.LEFT, padx=2)
+
         self.msg_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         self.msg_entry.bind("<Return>", lambda event: self.send_broadcast())
         
         self.send_btn = tk.Button(bottom_frame, text="Kirim Chat", font=("Arial", 10, "bold"),
-                                  bg="#28a745", fg="white", width=12, command=self.send_broadcast)
+                        bg="#28a745", fg="white", width=12, command=self.send_broadcast)
         self.send_btn.pack(side=tk.RIGHT)
         
         right_frame = tk.LabelFrame(self.container, text=" PANEL KONTROL ", font=("Arial", 10, "bold"), padx=10, pady=10)
@@ -92,32 +107,32 @@ class CipherTalkClientGUI:
         tk.Label(right_frame, text="Manajemen Forum", font=("Arial", 9, "bold"), fg="#666").pack(anchor="w", pady=(5,2))
         
         tk.Button(right_frame, text="🌐 Daftar Forum", bg="#f1f3f4", fg="black", anchor="w",
-                  command=lambda: self.send_action_packet({"command": "list"})).pack(fill=tk.X, pady=2)
-                  
+            command=lambda: self.send_action_packet({"command": "list"})).pack(fill=tk.X, pady=2)
+        
         tk.Button(right_frame, text="➕ Buat Forum Baru", bg="#e8f0fe", fg="#1a73e8", anchor="w",
-                  command=self.gui_create_room).pack(fill=tk.X, pady=2)
-                  
+            command=self.gui_create_room).pack(fill=tk.X, pady=2)
+            
         tk.Button(right_frame, text="🚪 Masuk Forum", bg="#e6f4ea", fg="#137333", anchor="w",
-                  command=self.gui_join_room).pack(fill=tk.X, pady=2)
-                  
+            command=self.gui_join_room).pack(fill=tk.X, pady=2)
+                
         tk.Button(right_frame, text="↩️ Kembali ke Lobby", bg="#fce8e6", fg="#c5221f", anchor="w",
-                  command=lambda: self.send_action_packet({"command": "leave"})).pack(fill=tk.X, pady=2)
+            command=lambda: self.send_action_packet({"command": "leave"})).pack(fill=tk.X, pady=2)
         
         tk.Frame(right_frame, height=2, bd=1, relief=tk.SUNKEN).pack(fill=tk.X, pady=10)
         
         tk.Label(right_frame, text="Fitur Pengguna", font=("Arial", 9, "bold"), fg="#666").pack(anchor="w", pady=(0,2))
         
         tk.Button(right_frame, text="👥 Cek User Online", bg="#f1f3f4", fg="black", anchor="w",
-                  command=lambda: self.send_action_packet({"command": "online"})).pack(fill=tk.X, pady=2)
-                  
-        tk.Button(right_frame, text="🔒 Bisikan Privat (Whisper)", bg="#feefc3", fg="#b06000", anchor="w",
-                  command=self.gui_whisper_user).pack(fill=tk.X, pady=2)
-                  
+            command=lambda: self.send_action_packet({"command": "online"})).pack(fill=tk.X, pady=2)
+            
+        tk.Button(right_frame, text="🔒 Chat Privat", bg="#feefc3", fg="#b06000", anchor="w",
+            command=self.gui_whisper_user).pack(fill=tk.X, pady=2)
+                
         tk.Button(right_frame, text="❓ Bantuan Perintah", bg="#f1f3f4", fg="black", anchor="w",
-                  command=lambda: self.send_action_packet({"command": "help"})).pack(fill=tk.X, pady=2)
+            command=lambda: self.send_action_packet({"command": "help"})).pack(fill=tk.X, pady=2)
         
         tk.Button(right_frame, text="❌ Keluar Aplikasi", bg="#d9534f", fg="white", font=("Arial", 10, "bold"),
-                  command=self.root.quit).pack(fill=tk.X, side=tk.BOTTOM, pady=10)
+            command=self.root.quit).pack(fill=tk.X, side=tk.BOTTOM, pady=10)
 
         self.append_chat("SISTEM", "Selamat datang di CipherTalk Versi GUI!\nSilakan gunakan deretan tombol di panel kontrol sebelah kanan untuk mengelola room atau melakukan whisper secara instan.")
     
@@ -277,6 +292,10 @@ class CipherTalkClientGUI:
         self.chat_area.see(tk.END)
         self.chat_area.config(state=tk.DISABLED)
 
+    def insert_emoji(self, emoji):
+        self.msg_entry.insert(tk.INSERT, emoji)
+        self.msg_entry.focus_set()
+        
 if __name__ == "__main__":
     root = tk.Tk()
     app = CipherTalkClientGUI(root)
